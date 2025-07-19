@@ -1,4 +1,4 @@
-# Stock Veda – Streamlit web‑app (Advanced Edition)
+# Stock Veda – Streamlit web‑app (Stabilized Edition)
 # ---------------------------------------------------
 # Quick‑start:
 #   $ pip install -r requirements.txt
@@ -6,19 +6,17 @@
 #
 # requirements.txt should contain:
 # streamlit
-# yfinance
-# pandas
-# ta
-# mplfinance
-# numpy
-# matplotlib
+yfinance
+pandas
+numpy
+mplfinance
+matplotlib
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
 import mplfinance as mpf
-import ta
 import matplotlib.pyplot as plt
 from io import BytesIO
 
@@ -27,26 +25,41 @@ from io import BytesIO
 # ---------------------------------------------------
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    close = df["Close"].astype(float).squeeze()
-    volume = df["Volume"].astype(float).squeeze()
-    
-    df["EMA20"] = ta.trend.EMAIndicator(close=close, window=20).ema_indicator()
-    df["EMA50"] = ta.trend.EMAIndicator(close=close, window=50).ema_indicator()
-    df["RSI14"] = ta.momentum.RSIIndicator(close=close, window=14).rsi()
-    df["OBV"] = ta.volume.OnBalanceVolumeIndicator(close=close, volume=volume).on_balance_volume()
-    df["AD"] = ta.volume.AccDistIndexIndicator(
-        high=df["High"], low=df["Low"], close=close, volume=volume
-    ).acc_dist_index()
+    """Add key technical indicators without relying on ta‑lib to avoid shape errors."""
+    df = df.copy()
+    close = df["Close"].astype(float)
+    high = df["High"].astype(float)
+    low = df["Low"].astype(float)
+    volume = df["Volume"].astype(float)
+
+    # EMAs via pandas
+    df["EMA20"] = close.ewm(span=20, adjust=False).mean()
+    df["EMA50"] = close.ewm(span=50, adjust=False).mean()
+
+    # RSI 14 (manual Keller formula)
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = -delta.clip(upper=0).rolling(14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    df["RSI14"] = 100 - (100 / (1 + rs))
+
+    # On‑Balance Volume (manual)
+    obv_delta = np.sign(close.diff()).fillna(0) * volume
+    df["OBV"] = obv_delta.cumsum()
+
+    # Accumulation / Distribution (manual)
+    mfm = ((close - low) - (high - close)) / (high - low)
+    mfm = mfm.replace([np.inf, -np.inf], 0).fillna(0)
+    df["AD"] = (mfm * volume).cumsum()
 
     # Smart Money Detection – CVD based
-    typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
-    money_flow = typical_price * df["Volume"]
+    typical_price = (high + low + close) / 3
+    money_flow = typical_price * volume
     df["CVD"] = money_flow.cumsum()
     df["CVD_SLOPE"] = df["CVD"].diff()
     df["SMART_CANDLE"] = df["CVD_SLOPE"] > df["CVD_SLOPE"].rolling(10).mean() * 2
 
     return df
-
 
 def detect_vcp(df: pd.DataFrame) -> str:
     highs = df["High"].tail(60).astype(float)
@@ -67,6 +80,8 @@ def breakout_zone(df: pd.DataFrame) -> tuple:
 
 def smart_money_signal(df: pd.DataFrame) -> str:
     ad = df["AD"].tail(20)
+    if ad.isna().all():
+        return "Neutral"
     slope = np.polyfit(range(len(ad)), ad, 1)[0]
     return "Accumulation" if slope > 0 else "Distribution"
 
@@ -82,7 +97,7 @@ def final_verdict(vcp: str, breakout: bool, smart: str, rsi: float) -> str:
 # ---------------------------------------------------
 
 st.set_page_config(page_title="Stock Veda", layout="wide")
-st.title("📈 Stock Veda – Auto Chart Insight Bot (Advanced Edition)")
+st.title("📈 Stock Veda – Auto Chart Insight Bot (Stabilized Edition)")
 
 st.sidebar.header("🔍 Stock Selector")
 symbol = st.sidebar.text_input("Enter stock symbol (e.g. RELIANCE.NS)", value="RELIANCE.NS")
