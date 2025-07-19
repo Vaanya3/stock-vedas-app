@@ -6,12 +6,12 @@
 #
 # requirements.txt should contain:
 # streamlit
-yfinance
-pandas
-ta
-mplfinance
-numpy
-matplotlib
+# yfinance
+# pandas
+# ta
+# mplfinance
+# numpy
+# matplotlib
 
 import streamlit as st
 import pandas as pd
