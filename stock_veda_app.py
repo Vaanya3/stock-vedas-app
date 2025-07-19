@@ -6,7 +6,7 @@
 #
 # requirements.txt should contain:
 # streamlit
-yfinance
+import yfinance as yf
 pandas
 ta
 mplfinance
