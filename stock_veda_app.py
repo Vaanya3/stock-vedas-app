@@ -1,4 +1,17 @@
-# stock_veda_app.py
+# Stock Veda – Streamlit web‑app (Advanced Edition)
+# ---------------------------------------------------
+# Quick‑start:
+#   $ pip install -r requirements.txt
+#   $ streamlit run stock_veda_app.py
+#
+# requirements.txt should contain:
+# streamlit
+yfinance
+pandas
+ta
+mplfinance
+numpy
+matplotlib
 
 import streamlit as st
 import pandas as pd
@@ -9,25 +22,29 @@ import ta
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-# --------------------------------------------
-# Helper Functions
-# --------------------------------------------
+# ---------------------------------------------------
+# Helper functions
+# ---------------------------------------------------
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     close = df["Close"].astype(float)
     volume = df["Volume"].astype(float)
-    df["EMA20"] = ta.trend.ema_indicator(close, window=20)
-    df["EMA50"] = ta.trend.ema_indicator(close, window=50)
-    df["RSI14"] = ta.momentum.rsi(close, window=14)
-    df["OBV"] = ta.volume.on_balance_volume(close, volume)
-    df["AD"] = ta.volume.acc_dist_index(high=df["High"], low=df["Low"], close=close, volume=volume)
+    df["EMA20"] = ta.trend.EMAIndicator(close=close, window=20).ema_indicator().values
+    df["EMA50"] = ta.trend.EMAIndicator(close=close, window=50).ema_indicator().values
+    df["RSI14"] = ta.momentum.RSIIndicator(close=close, window=14).rsi().values
+    df["OBV"] = ta.volume.OnBalanceVolumeIndicator(close=close, volume=volume).on_balance_volume().values
+    df["AD"] = ta.volume.AccDistIndexIndicator(
+        high=df["High"], low=df["Low"], close=close, volume=volume
+    ).acc_dist_index().values
+
+    # Smart Money Detection – CVD based
     typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
     money_flow = typical_price * df["Volume"]
     df["CVD"] = money_flow.cumsum()
     df["CVD_SLOPE"] = df["CVD"].diff()
     df["SMART_CANDLE"] = df["CVD_SLOPE"] > df["CVD_SLOPE"].rolling(10).mean() * 2
-    return df
 
+    return df
 
 def detect_vcp(df: pd.DataFrame) -> str:
     highs = df["High"].tail(60).astype(float)
@@ -39,7 +56,6 @@ def detect_vcp(df: pd.DataFrame) -> str:
     contractions = np.all(last_swings[1:] < last_swings[:-1] * 0.9)
     return "Strong VCP pattern" if contractions else "No clear VCP"
 
-
 def breakout_zone(df: pd.DataFrame) -> tuple:
     recent_high = df["High"].tail(60).max()
     latest_close = df["Close"].iloc[-1]
@@ -47,12 +63,10 @@ def breakout_zone(df: pd.DataFrame) -> tuple:
     is_breakout = latest_close > recent_high * 0.995 and vol_ratio > 1.5
     return is_breakout, recent_high
 
-
 def smart_money_signal(df: pd.DataFrame) -> str:
     ad = df["AD"].tail(20)
     slope = np.polyfit(range(len(ad)), ad, 1)[0]
     return "Accumulation" if slope > 0 else "Distribution"
-
 
 def final_verdict(vcp: str, breakout: bool, smart: str, rsi: float) -> str:
     if breakout and vcp.startswith("Strong") and smart == "Accumulation" and 40 < rsi < 70:
@@ -61,9 +75,9 @@ def final_verdict(vcp: str, breakout: bool, smart: str, rsi: float) -> str:
         return "SELL/AVOID 🚫 – distribution or overbought"
     return "WATCHLIST 👀 – setup forming but not ready"
 
-# --------------------------------------------
+# ---------------------------------------------------
 # Streamlit UI
-# --------------------------------------------
+# ---------------------------------------------------
 
 st.set_page_config(page_title="Stock Veda", layout="wide")
 st.title("📈 Stock Veda – Auto Chart Insight Bot (Advanced Edition)")
@@ -76,11 +90,12 @@ interval = st.sidebar.selectbox("Interval", ["1d", "1h"], index=0)
 if not symbol:
     st.stop()
 
-tabs = st.tabs(["Auto Analysis", "Colab Tab 1", "Colab Tab 2", "Colab Tab 3", "Colab Tab 4", "Colab Tab 5"])
+TAB_TITLES = ["Auto Analysis", "Colab Tab 1", "Colab Tab 2", "Colab Tab 3", "Colab Tab 4", "Colab Tab 5"]
+tabs = st.tabs(TAB_TITLES)
 auto_tab = tabs[0]
 
 with auto_tab:
-    st.subheader(f"🧪 Automated Technical Snapshot: {symbol.upper()}")
+    st.subheader(f"🧪 Automated Technical Snapshot : {symbol.upper()}")
     try:
         data = yf.download(symbol, period=period, interval=interval, progress=False)
     except Exception as e:
@@ -98,10 +113,8 @@ with auto_tab:
     latest_rsi = data["RSI14"].iloc[-1]
     verdict = final_verdict(vcp_status, is_breakout, smart_status, latest_rsi)
 
-    candle_colors = [
-        "#FFD700" if smart else "#26a69a" if o < c else "#ef5350"
-        for o, c, smart in zip(data.Open, data.Close, data.SMART_CANDLE)
-    ]
+    # Candle colors for smart money highlight
+    candle_colors = ["#FFD700" if smart else "#26a69a" if o < c else "#ef5350" for o, c, smart in zip(data.Open, data.Close, data.SMART_CANDLE)]
 
     fig, ax = mpf.plot(
         data,
@@ -114,6 +127,7 @@ with auto_tab:
         update_width_config=dict(candle_linewidth=0.8),
         candle_colors=candle_colors
     )
+
     ax[0].axhline(y=resistance_level, color='orange', linestyle='--', label='Resistance')
     if is_breakout:
         ax[0].annotate(
@@ -123,6 +137,7 @@ with auto_tab:
             arrowprops=dict(facecolor='green', shrink=0.05),
             fontsize=10, color='green'
         )
+
     fig_buf = BytesIO()
     fig.savefig(fig_buf, format="png", bbox_inches="tight")
     st.image(fig_buf, caption="Smart Money Candle Highlight + EMA + S/R", use_column_width=True)
@@ -138,10 +153,10 @@ with auto_tab:
     col4.metric("RSI", f"{latest_rsi:.1f}")
     st.markdown(f"## Verdict: **{verdict}**")
 
-# Colab placeholders
+placeholder_md = """### Embed your Google Colab notebook here\nPaste the **public shareable link** below and press Enter."""
 for i in range(1, 6):
     with tabs[i]:
-        st.write("### Embed your Google Colab notebook here")
-        colab_url = st.text_input(f"Colab {i} URL", key=f"colab{i}")
+        st.write(placeholder_md)
+        colab_url = st.text_input(f"Colab {i} URL", key=f"colab{i}")
         if colab_url:
             st.components.v1.iframe(colab_url, height=800, scrolling=True)
