@@ -27,15 +27,16 @@ from io import BytesIO
 # ---------------------------------------------------
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    close = df["Close"].astype(float)
-    volume = df["Volume"].astype(float)
-    df["EMA20"] = ta.trend.EMAIndicator(close=close, window=20).ema_indicator().values
-    df["EMA50"] = ta.trend.EMAIndicator(close=close, window=50).ema_indicator().values
-    df["RSI14"] = ta.momentum.RSIIndicator(close=close, window=14).rsi().values
-    df["OBV"] = ta.volume.OnBalanceVolumeIndicator(close=close, volume=volume).on_balance_volume().values
+    close = df["Close"].astype(float).squeeze()
+    volume = df["Volume"].astype(float).squeeze()
+    
+    df["EMA20"] = ta.trend.EMAIndicator(close=close, window=20).ema_indicator()
+    df["EMA50"] = ta.trend.EMAIndicator(close=close, window=50).ema_indicator()
+    df["RSI14"] = ta.momentum.RSIIndicator(close=close, window=14).rsi()
+    df["OBV"] = ta.volume.OnBalanceVolumeIndicator(close=close, volume=volume).on_balance_volume()
     df["AD"] = ta.volume.AccDistIndexIndicator(
         high=df["High"], low=df["Low"], close=close, volume=volume
-    ).acc_dist_index().values
+    ).acc_dist_index()
 
     # Smart Money Detection – CVD based
     typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
@@ -45,6 +46,7 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["SMART_CANDLE"] = df["CVD_SLOPE"] > df["CVD_SLOPE"].rolling(10).mean() * 2
 
     return df
+
 
 def detect_vcp(df: pd.DataFrame) -> str:
     highs = df["High"].tail(60).astype(float)
